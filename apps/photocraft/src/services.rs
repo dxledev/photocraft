@@ -270,6 +270,25 @@ pub fn config_dir() -> Option<PathBuf> {
     crate::app_dirs::config_dir()
 }
 
+/// The desktop shell's active palette (`Colors.qml`) for the dark-theme tint. The
+/// `~/.config/themes/.caelestia-use` selector points at the dynamic provider (island, noctalia,
+/// caelestia) or at the static `current` theme, so one read covers every shell mode.
+/// `PHOTOCRAFT_SHELL_THEME` names another `Colors.qml`; `off` disables the tint.
+fn shell_palette() -> Option<String> {
+    use std::io::Read;
+    let path = match std::env::var_os("PHOTOCRAFT_SHELL_THEME") {
+        Some(p) if p == "off" => return None,
+        Some(p) => PathBuf::from(p),
+        None => {
+            let themes = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| Path::new(&h).join(".config")))?.join("themes");
+            [".caelestia-use", "current"].iter().map(|d| themes.join(d).join("Colors.qml")).find(|p| p.is_file())?
+        }
+    };
+    let mut text = String::new();
+    std::fs::File::open(path).ok()?.take(1 << 20).read_to_string(&mut text).ok()?;
+    Some(text)
+}
+
 pub fn prefs_file() -> Option<PathBuf> {
     config_dir().map(|d| d.join("preferences.json"))
 }
@@ -554,6 +573,7 @@ pub fn native(automation: Option<photocraft_automation::AuthorizedWorkspace>) ->
         photoshop_shortcuts: Some(Box::new(|| crate::photoshop_settings::live_keyboard_shortcuts(&|k| std::env::var_os(k)))),
         save_prefs: Some(Box::new(|text: &str| write_atomic(&prefs_file().ok_or("no config directory")?, text.as_bytes()))),
         system_theme: crate::appearance::service(),
+        shell_palette: Some(Box::new(shell_palette)),
         append_text: Some(Box::new(|path: &str, text: &str| {
             use std::io::Write;
             let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path).map_err(|e| e.to_string())?;

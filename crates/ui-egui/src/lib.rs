@@ -205,6 +205,7 @@ pub mod symmetry_ui;
 mod tab_strip;
 pub mod targa_options_ui;
 pub mod text_field_menu;
+pub mod shell_tint;
 pub mod theme;
 pub mod tiff_options_ui;
 mod tile_overlay;
@@ -387,6 +388,8 @@ pub type LoadTextFn = Box<dyn FnMut() -> Option<String>>;
 pub type SaveTextFn = Box<dyn FnMut(&str) -> Result<(), String>>;
 /// Platform appearance when egui cannot detect it (for example, Wayland without a theme event).
 pub type SystemThemeFn = Box<dyn Fn(&egui::Context) -> Option<egui::Theme>>;
+/// The text of the desktop shell's active `Colors.qml`, if it publishes one (see `shell_tint`).
+pub type ShellPaletteFn = Box<dyn Fn() -> Option<String>>;
 /// Autosave a document snapshot for crash recovery: (snapshot, revision, original path).
 pub type AutosaveFn = Box<dyn FnMut(&std::sync::Arc<Document>, u64, Option<&str>) -> Result<(), String>>;
 /// Poll successful or failed background writes: (document id, revision, result).
@@ -478,6 +481,8 @@ pub struct Services {
     /// Photoshop's live keyboard shortcut set, imported once at first launch (`kys_import`).
     pub photoshop_shortcuts: Option<PhotoshopShortcutsFn>,
     pub system_theme: Option<SystemThemeFn>,
+    /// Desktop shell colours that tint the dark themes while the appearance follows the system.
+    pub shell_palette: Option<ShellPaletteFn>,
     /// The native window is connected directly to a Wayland compositor.
     pub is_wayland: bool,
     /// On Wayland, the shell command that starts this install under XWayland, where native file
@@ -2205,7 +2210,9 @@ impl PhotocraftApp {
         }
         self.ui.theme = kind;
         panel_docking::sync_visibility(self);
-        theme::apply(ctx, kind);
+        let tint = prefs_ui::shell_tint_for(self, kind);
+        theme::apply_tinted(ctx, kind, tint.as_ref());
+        self.prefs_rt.shell_applied = tint;
         self.checker = None;
     }
 

@@ -972,10 +972,16 @@ pub fn mono(size: f32) -> FontId {
 
 /// Apply a theme to egui's global style and publish its tokens.
 pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
+    apply_tinted(ctx, kind, None);
+}
+
+/// [`apply`] with a desktop shell palette tinting a dark theme (see [`crate::shell_tint`]).
+pub fn apply_tinted(ctx: &egui::Context, kind: ThemeKind, shell: Option<&crate::shell_tint::ShellPalette>) {
     // Keep native windows at SystemDefault so macOS continues reporting OS appearance changes,
     // including when an integration or restored egui state pinned its own theme preference.
     ctx.set_theme(egui::ThemePreference::System);
     let t = Tokens::for_kind(kind);
+    let t = shell.map_or(t, |palette| crate::shell_tint::tint(t, palette));
     ctx.data_mut(|d| d.insert_temp(egui::Id::new("photocraft-theme"), t));
     let mut v = if t.dark() { Visuals::dark() } else { Visuals::light() };
     v.panel_fill = t.chrome;

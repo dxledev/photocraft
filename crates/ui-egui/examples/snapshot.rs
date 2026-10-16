@@ -8,6 +8,9 @@
 //!
 //! `--system-theme light|dark|none` supplies a deterministic OS appearance for theme captures.
 //!
+//! `--shell-theme Colors.qml` supplies the desktop shell palette that tints the dark themes (use it
+//! with `--system-theme dark` and `interface.appearanceMode` set to `auto`).
+//!
 //! `--safe-gpu` draws the canvas on the CPU path, like the app's `--safe-gpu` launch.
 //! `--wayland-notice` previews the native file drag-and-drop guidance shown in Wayland sessions.
 //! `--custom-titlebar` draws the Windows/Linux title bar (caption buttons in the top bar).
@@ -57,6 +60,7 @@ fn main() {
             photocraft_io::export(doc, path, &opts).map(|r| (r.bytes, r.warnings)).map_err(|e| e.to_string())
         })),
         write: Some(Box::new(|path: &str, bytes: &[u8]| photocraft_format::atomic_write(std::path::Path::new(path), bytes).map_err(|e| e.to_string()))),
+        shell_palette: arg(&args, "--shell-theme").map(|path| Box::new(move || std::fs::read_to_string(&path).ok()) as photocraft_ui_egui::ShellPaletteFn),
         ..Default::default()
     };
     let open = arg(&args, "--open");

@@ -26,6 +26,11 @@ use crate::theme::{ThemeKind, Tokens};
 #[derive(Default)]
 pub struct Runtime {
     loaded: bool,
+    /// The desktop shell's palette as last read, polled while the system appearance is dark.
+    shell_palette: Option<crate::shell_tint::ShellPalette>,
+    shell_polled: Option<f64>,
+    /// The palette the theme on screen was built with, so a shell theme switch re-applies it.
+    pub(crate) shell_applied: Option<crate::shell_tint::ShellPalette>,
     /// Preferences revision last written to storage (or loaded from it).
     saved_rev: u64,
     /// This instance's preferences as of `saved_rev`: the base of the three-way merge on save.
@@ -431,8 +436,38 @@ pub(crate) fn sync_appearance(app: &mut PhotocraftApp, ctx: &egui::Context) {
     ctx.set_theme(egui::ThemePreference::System);
     // The native service also covers Wayland sessions where winit has no system theme.
     let selected = selected_theme(&app.session.prefs().interface, system_theme(app, ctx));
-    if app.ui.theme != selected {
+    poll_shell_palette(app, ctx, selected);
+    if app.ui.theme != selected || app.prefs_rt.shell_applied != shell_tint_for(app, selected) {
         app.apply_theme(ctx, selected);
+    }
+}
+
+/// How often the shell's `Colors.qml` is re-read while it tints the UI, in seconds.
+const SHELL_POLL_SECS: f64 = 1.0;
+
+/// The shell palette that tints `kind`: only a dark theme chosen by "follow the system".
+pub(crate) fn shell_tint_for(app: &PhotocraftApp, kind: ThemeKind) -> Option<crate::shell_tint::ShellPalette> {
+    let auto = app.session.prefs().interface.appearance_mode == AppearanceMode::Auto;
+    if auto && crate::theme::Tokens::for_kind(kind).dark() { app.prefs_rt.shell_palette.clone() } else { None }
+}
+
+/// Re-read the shell palette (throttled), keeping the last valid one when the file is missing or
+/// mid-write. The window repaints once a second while it is tinted so a theme switch shows up
+/// without input.
+fn poll_shell_palette(app: &mut PhotocraftApp, ctx: &egui::Context, selected: ThemeKind) {
+    let auto = app.session.prefs().interface.appearance_mode == AppearanceMode::Auto;
+    if !auto || !crate::theme::Tokens::for_kind(selected).dark() {
+        return;
+    }
+    let Some(read) = app.services.shell_palette.as_ref() else { return };
+    let now = ctx.input(|i| i.time);
+    ctx.request_repaint_after(std::time::Duration::from_secs_f64(SHELL_POLL_SECS));
+    if app.prefs_rt.shell_polled.is_some_and(|last| now - last < SHELL_POLL_SECS) {
+        return;
+    }
+    app.prefs_rt.shell_polled = Some(now);
+    if let Some(palette) = read().and_then(|text| crate::shell_tint::ShellPalette::parse(&text)) {
+        app.prefs_rt.shell_palette = Some(palette);
     }
 }
 
