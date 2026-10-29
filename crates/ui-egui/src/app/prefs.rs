@@ -40,7 +40,7 @@ impl PhotocraftApp {
         }
         self.ui.theme = kind;
         panel_docking::sync_visibility(self);
-        let tint = prefs_ui::shell_tint_for(self, kind);
+        let tint = crate::prefs_ui::shell_tint_for(self, kind);
         theme::apply_tinted(ctx, kind, tint.as_ref());
         self.prefs_rt.shell_applied = tint;
         self.checker = None;
